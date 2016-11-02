@@ -1,4 +1,10 @@
 #! c:\perl\bin\perl.exe
+
+# https://github.com/donfranke/evtparser/blob/master/evtparse.pl
+# THIS IS A MODIFIED VERSION OF evtparse.pl by H. Carvey
+# It has been modified to include directory and file reading and manipulation
+#  to integrate with specific architecture
+
 #---------------------------------------------------------------------
 # evtparse.pl - script to parse Windows 2000/XP/2003 Event Log files
 #   Output is in TLN format, goes to STDOUT
@@ -35,10 +41,6 @@ if ($config{evt}) {
 }
 elsif ($config{dir}) {
     my @list;
-#    die $config{dir}." not found.\n" unless (-e $config{dir});
-#    die $config{dir}." is not a directory.\n" unless (-d $config{dir});
-    #$config{dir} = $config{dir}."\\" unless ($config{dir} =~ m/\\$/);
-#    print "DIR = ".$config{dir}."\n";
     opendir(DIR,$config{dir}) || die "Could not open ".$config{dir}.": $!\n";
     @list = grep{/\.evt$/i} readdir(DIR);
     closedir(DIR);
@@ -55,10 +57,6 @@ chomp(my @hx = <$fh>);
 close $fh;
 
 my $filetoparse;
-#foreach my $e (@hx) {
-    #print $e . "\n";
-#}
-#exit 0;
 
 # iterate files to identify which one is not in the history list
 my @filestoprocess = @files;
@@ -74,35 +72,19 @@ foreach my $file (@files) {
         if($filename eq $hxfile) {
             #print " MATCH" ;
             splice @filestoprocess,$j,1;
-            # don't process!
-            
-        } else {
-            #print " NO MATCH";
-            #$filetoparse = $file;
-            #parseFile($file);
-        }
-        #print "\n";
-        
+        }        
     }
     $i++;
-    #print $file . "\n";
-    #if($filetoparse ne "") {
-    #    print "File exists\n";
-    #    parseFile($filetoparse);
-    #}
 }
 
 foreach my $file (@filestoprocess) {
     my $fileage = int(-M $file);
-    #print "MTime: " . $fileage . "\n";
     if ($fileage<2) {
         print "FILE: " . $file . " (" . $fileage . ")\n";
         parseFile($file);
     }
 }
-#exit 0;
 
-#foreach my $file (@files) {
 sub parseFile {
     my $file = shift;
     my $splunkfile = $config{sf};
@@ -116,10 +98,8 @@ sub parseFile {
 
     open(my $sfh,">",$splunkfile) || die "Could not open output file $splunkfile: $!\n";
     print "FILE: " . $file . "\n";
-    #exit 0;
 
     my $data;
-    #my $file = $filetoparse;
     my $size = (stat($file))[7];
     my $ofs = 0;
     open(FH,"<",$file) || die "Could not open input file $file: $!\n";
@@ -136,7 +116,6 @@ sub parseFile {
         seek(FH,$ofs,0);
         read(FH,$data,4);
         if (unpack("V",$data) == 0x654c664c) {
-#            printf "Magic number located at offset 0x%x\n",$ofs;
             seek(FH,$ofs - 4,0);
             read(FH,$data,4);
             my $l = unpack("V",$data);
@@ -158,7 +137,6 @@ sub parseFile {
                     else {
                         $r{strings} =~ s/,/;/g;
                         $eventid = $r{evt_id};
-                        #print "EVENT ID: " . $eventid . "\n";
                         if($eventid eq "560" || $eventid eq "563") {
                             print $sfh gmtime($r{time_gen})." Z,".$r{computername}.",".$r{sid}.",".$r{source}.",".
                             $r{evt_id}.",".$types{$r{evt_type}}.",".$r{strings}."\n";
@@ -183,12 +161,10 @@ sub parseFile {
 # write to history file    
 sub recordHistory {
     my $infile = shift;
-    # get filename from path
     my $i = rindex($infile,"/");
     $infile = substr($infile,$i+1,100);
     $infile =~ s/^\s+//;
     print "Event file: " . $infile . "\n";
-    #print "History file: " . $config{hx} . "\n";
     open(my $fh, '>>', $config{hx}) or die "Could not open file '$config{hx}' $!";
     print $fh $infile . "\n";
     close $fh;
